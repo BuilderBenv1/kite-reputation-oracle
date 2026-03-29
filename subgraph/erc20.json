@@ -1,22 +1,17 @@
-[
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "name": "from", "type": "address" },
-      { "indexed": true, "name": "to", "type": "address" },
-      { "indexed": false, "name": "value", "type": "uint256" }
-    ],
-    "name": "Transfer",
-    "type": "event"
+{
+  "version": "1",
+  "name": "AgentProof Kite USDT",
+  "abis": {
+    "ERC20": {
+      "path": "./erc20_abi.json"
+    }
   },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "name": "owner", "type": "address" },
-      { "indexed": true, "name": "spender", "type": "address" },
-      { "indexed": false, "name": "value", "type": "uint256" }
-    ],
-    "name": "Approval",
-    "type": "event"
-  }
-]
+  "instances": [
+    {
+      "abi": "ERC20",
+      "address": "0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63",
+      "startBlock": 0,
+      "chain": "kite-ai-testnet"
+    }
+  ]
+}

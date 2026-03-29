@@ -28,7 +28,7 @@ const paymentHistory: PaymentHistory = new Map();
 // Goldsky subgraph endpoint
 const GOLDSKY_ENDPOINT =
   process.env.GOLDSKY_SUBGRAPH_URL ||
-  "https://api.goldsky.com/api/public/project_default/subgraphs/agentproof-kite-usdt/1.0/gn";
+  "https://api.goldsky.com/api/public/project_cmnc9hmwicqbe01xbamrp9wcl/subgraphs/agentproof-kite-usdt-kite-ai-testnet/1.0/gn";
 
 const USDT_CONTRACT = KITE_CHAIN_CONFIG.usdtContract.toLowerCase();
 
