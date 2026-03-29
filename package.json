@@ -1,0 +1,25 @@
+{
+  "name": "kite-reputation-oracle",
+  "version": "1.0.0",
+  "description": "AgentProof's external reputation oracle for Kite chain",
+  "main": "dist/api/score.js",
+  "scripts": {
+    "dev": "ts-node -r dotenv/config api/score.ts",
+    "build": "tsc && cp -r app dist/app",
+    "start": "node -r dotenv/config dist/api/score.js",
+    "index": "ts-node -r dotenv/config indexer/index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.4",
+    "express": "^4.21.1",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}
