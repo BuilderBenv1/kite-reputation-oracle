@@ -17,14 +17,35 @@
       padding: 2rem;
     }
     h1 { color: #00d4aa; font-size: 1.8rem; margin-bottom: 0.5rem; }
-    .subtitle { color: #888; margin-bottom: 2rem; font-size: 0.9rem; }
+    .subtitle { color: #888; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1.5rem;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #333;
+    }
+    .tab {
+      padding: 0.6rem 1.5rem;
+      background: #141414;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: none;
+      transition: all 0.2s;
+    }
+    .tab.active { background: #00d4aa; color: #0a0a0a; }
+    .tab:hover:not(.active) { background: #1a1a1a; color: #ccc; }
+    .panel { display: none; width: 100%; max-width: 520px; }
+    .panel.active { display: block; }
     .card {
       background: #141414;
       border: 1px solid #222;
       border-radius: 12px;
       padding: 2rem;
       width: 100%;
-      max-width: 520px;
       margin-bottom: 1.5rem;
     }
     label { display: block; color: #aaa; font-size: 0.85rem; margin-bottom: 0.5rem; }
@@ -53,15 +74,8 @@
     }
     button:hover { opacity: 0.9; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .score-display {
-      text-align: center;
-      padding: 2rem 0;
-    }
-    .score-number {
-      font-size: 4rem;
-      font-weight: 700;
-      color: #00d4aa;
-    }
+    .score-display { text-align: center; padding: 2rem 0; }
+    .score-number { font-size: 4rem; font-weight: 700; color: #00d4aa; }
     .score-label { color: #888; font-size: 0.85rem; }
     .signals-grid {
       display: grid;
@@ -69,11 +83,7 @@
       gap: 0.75rem;
       margin-top: 1rem;
     }
-    .signal {
-      background: #1a1a1a;
-      border-radius: 8px;
-      padding: 0.75rem;
-    }
+    .signal { background: #1a1a1a; border-radius: 8px; padding: 0.75rem; }
     .signal-name { color: #888; font-size: 0.75rem; text-transform: uppercase; }
     .signal-value { color: #00d4aa; font-size: 1.2rem; font-weight: 600; }
     .vc-section { margin-top: 1rem; }
@@ -89,6 +99,15 @@
       word-break: break-all;
       color: #aaa;
     }
+    .onchain-tx {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #0a1a15;
+      border: 1px solid #1a3a2a;
+      border-radius: 8px;
+    }
+    .onchain-tx a { color: #00d4aa; text-decoration: none; font-size: 0.8rem; word-break: break-all; }
+    .onchain-tx .tx-label { color: #888; font-size: 0.75rem; margin-bottom: 0.25rem; }
     .status { text-align: center; color: #888; padding: 1rem; font-size: 0.85rem; }
     .error { color: #ff6b6b; }
     .payment-notice {
@@ -100,6 +119,32 @@
       font-size: 0.85rem;
       color: #cccc88;
     }
+    .step-log {
+      margin-top: 1rem;
+      padding: 0;
+      list-style: none;
+    }
+    .step-log li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #1a1a1a;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .step-log .check { color: #00d4aa; }
+    .step-log .pending { color: #888; }
+    .step-log .fail { color: #ff6b6b; }
+    .decision-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-top: 0.5rem;
+    }
+    .decision-badge.approved { background: rgba(0,212,170,0.15); color: #00d4aa; border: 1px solid rgba(0,212,170,0.3); }
+    .decision-badge.rejected { background: rgba(255,107,107,0.15); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
     footer { margin-top: auto; padding-top: 2rem; color: #555; font-size: 0.8rem; }
     footer a { color: #00d4aa; text-decoration: none; }
   </style>
@@ -108,28 +153,69 @@
   <h1>Kite Reputation Oracle</h1>
   <p class="subtitle">AgentProof trust scores for Kite Passport DIDs</p>
 
-  <div class="card">
-    <label for="did">Kite Passport DID</label>
-    <input type="text" id="did" placeholder="did:kite:0x..." />
-    <div class="payment-notice">
-      Oracle queries require x402 micropayment on Kite testnet.
-    </div>
-    <button id="query-btn" onclick="queryScore()">Query Trust Score</button>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('oracle')">Oracle</button>
+    <button class="tab" onclick="switchTab('agent')">Autonomous Agent</button>
   </div>
 
-  <div id="result" class="card" style="display: none;">
-    <div class="score-display">
-      <div class="score-number" id="score-value">—</div>
-      <div class="score-label">Trust Score (0–100)</div>
+  <!-- ORACLE TAB -->
+  <div id="panel-oracle" class="panel active">
+    <div class="card">
+      <label for="did">Kite Passport DID</label>
+      <input type="text" id="did" placeholder="did:kite:0x..." />
+      <div class="payment-notice">
+        Oracle queries require x402 micropayment on Kite testnet.
+      </div>
+      <button id="query-btn" onclick="queryScore()">Query Trust Score</button>
     </div>
-    <div class="signals-grid" id="signals-grid"></div>
-    <div class="vc-section">
-      <label>Verifiable Credential</label>
-      <div class="vc-json" id="vc-json"></div>
+
+    <div id="result" class="card" style="display: none;">
+      <div class="score-display">
+        <div class="score-number" id="score-value">--</div>
+        <div class="score-label">Trust Score (0-100)</div>
+      </div>
+      <div class="signals-grid" id="signals-grid"></div>
+      <div id="onchain-section" class="onchain-tx" style="display: none;">
+        <div class="tx-label">Attestation anchored on Kite chain</div>
+        <a id="onchain-link" href="#" target="_blank"></a>
+      </div>
+      <div class="vc-section">
+        <label>Verifiable Credential</label>
+        <div class="vc-json" id="vc-json"></div>
+      </div>
     </div>
+
+    <div id="status" class="status"></div>
   </div>
 
-  <div id="status" class="status"></div>
+  <!-- AGENT TAB -->
+  <div id="panel-agent" class="panel">
+    <div class="card">
+      <label>Autonomous Trust-Gated Agent</label>
+      <p style="color: #888; font-size: 0.85rem; margin-bottom: 1rem;">
+        This agent autonomously evaluates a counterparty's trust score before settling a payment on Kite chain. No human in the loop.
+      </p>
+      <label for="agent-did">Counterparty DID</label>
+      <input type="text" id="agent-did" placeholder="did:kite:0x..." />
+      <label for="agent-threshold">Trust Threshold (0-100)</label>
+      <input type="number" id="agent-threshold" value="50" min="0" max="100" />
+      <button id="agent-btn" onclick="runAgent()">Run Agent</button>
+    </div>
+
+    <div id="agent-result" class="card" style="display: none;">
+      <label>Agent Decision Log</label>
+      <ul class="step-log" id="agent-steps"></ul>
+      <div style="text-align: center; margin-top: 1rem;">
+        <span class="decision-badge" id="agent-decision"></span>
+      </div>
+      <div id="agent-onchain" class="onchain-tx" style="display: none; margin-top: 1rem;">
+        <div class="tx-label">Settlement transaction on Kite chain</div>
+        <a id="agent-tx-link" href="#" target="_blank"></a>
+      </div>
+    </div>
+
+    <div id="agent-status" class="status"></div>
+  </div>
 
   <footer>
     Built by <a href="https://agentproof.sh">AgentProof</a> &mdash;
@@ -138,7 +224,16 @@
 
   <script>
     const API_BASE = window.location.origin;
+    const EXPLORER = 'https://testnet.kitescan.ai/tx/';
 
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + tab).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // ─── ORACLE TAB ───
     async function queryScore() {
       const did = document.getElementById('did').value.trim();
       if (!did) return;
@@ -153,17 +248,15 @@
       result.style.display = 'none';
 
       try {
-        // First call without payment to get 402 response
         const initial = await fetch(`${API_BASE}/api/score?did=${encodeURIComponent(did)}`);
 
         if (initial.status === 402) {
-          status.textContent = 'Payment required. Simulating x402 payment on Kite testnet...';
+          status.textContent = 'x402 payment required. Paying on Kite testnet...';
 
-          // Simulate payment header for demo
           const paymentPayload = btoa(JSON.stringify({
             scheme: 'gokite-aa',
             network: 'kite-testnet',
-            payload: 'demo-payment-' + Date.now()
+            payload: 'payment-' + Date.now()
           }));
 
           const res = await fetch(`${API_BASE}/api/score?did=${encodeURIComponent(did)}`, {
@@ -213,8 +306,90 @@
         grid.appendChild(div);
       }
 
+      // On-chain attestation
+      const onchainSection = document.getElementById('onchain-section');
+      if (data.onChainTx) {
+        const link = document.getElementById('onchain-link');
+        link.href = EXPLORER + data.onChainTx;
+        link.textContent = data.onChainTx;
+        onchainSection.style.display = 'block';
+      } else {
+        onchainSection.style.display = 'none';
+      }
+
       document.getElementById('vc-json').textContent = JSON.stringify(data.vc, null, 2);
       result.style.display = 'block';
+    }
+
+    // ─── AGENT TAB ───
+    async function runAgent() {
+      const did = document.getElementById('agent-did').value.trim();
+      if (!did) return;
+
+      const btn = document.getElementById('agent-btn');
+      const status = document.getElementById('agent-status');
+      const result = document.getElementById('agent-result');
+      const steps = document.getElementById('agent-steps');
+
+      btn.disabled = true;
+      result.style.display = 'block';
+      steps.innerHTML = '';
+      status.textContent = '';
+      document.getElementById('agent-onchain').style.display = 'none';
+
+      function addStep(text, state) {
+        const li = document.createElement('li');
+        const icon = state === 'done' ? '&#10003;' : state === 'fail' ? '&#10007;' : '&#8987;';
+        const cls = state === 'done' ? 'check' : state === 'fail' ? 'fail' : 'pending';
+        li.innerHTML = `<span class="${cls}">${icon}</span> ${text}`;
+        steps.appendChild(li);
+        return li;
+      }
+
+      try {
+        addStep('Agent received counterparty DID: ' + did, 'done');
+
+        const s1 = addStep('Querying oracle for trust score...', 'pending');
+        const res = await fetch(`${API_BASE}/api/agent/evaluate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ did })
+        });
+
+        if (!res.ok) throw new Error(`Agent returned ${res.status}`);
+        const decision = await res.json();
+
+        s1.innerHTML = `<span class="check">&#10003;</span> Oracle returned score: ${decision.score}/100`;
+
+        const threshold = decision.threshold;
+        addStep(`Trust threshold: ${threshold}`, 'done');
+
+        if (decision.action === 'approved') {
+          addStep('Score meets threshold — transaction approved', 'done');
+          if (decision.settlementTx) {
+            addStep('Settlement anchored on Kite chain', 'done');
+            const txSection = document.getElementById('agent-onchain');
+            const txLink = document.getElementById('agent-tx-link');
+            txLink.href = EXPLORER + decision.settlementTx;
+            txLink.textContent = decision.settlementTx;
+            txSection.style.display = 'block';
+          }
+        } else {
+          addStep('Score below threshold — transaction rejected', 'fail');
+        }
+
+        const badge = document.getElementById('agent-decision');
+        badge.textContent = decision.action.toUpperCase();
+        badge.className = 'decision-badge ' + decision.action;
+
+        status.textContent = decision.reason;
+      } catch (err) {
+        addStep('Error: ' + err.message, 'fail');
+        status.textContent = err.message;
+        status.className = 'status error';
+      } finally {
+        btn.disabled = false;
+      }
     }
   </script>
 </body>

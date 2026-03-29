@@ -4,7 +4,9 @@ import { x402Gate } from "../lib/x402";
 import { getHistoryForDid, startIndexer } from "../indexer";
 import { computeScore } from "../scoring";
 import { issueCredential } from "../lib/vc";
+import { anchorAttestation } from "../lib/attestation";
 import { issueVcHandler } from "./issue-vc";
+import { evaluateCounterparty, getDecisionLog } from "../agent";
 
 const app = express();
 app.use(express.json());
@@ -42,12 +44,21 @@ app.get("/api/score", x402Gate("/api/score"), async (req, res) => {
     const history = getHistoryForDid(did);
     const { score, signals } = computeScore(history);
 
-    const vc = await issueCredential(did, score, signals);
+    // Anchor attestation on Kite chain
+    let anchorTxHash: string | undefined;
+    try {
+      anchorTxHash = await anchorAttestation(did, score, signals, `vc-${Date.now()}`);
+    } catch (err) {
+      console.warn("[api/score] Attestation anchoring failed (continuing):", err);
+    }
+
+    const vc = await issueCredential(did, score, signals, anchorTxHash);
 
     res.json({
       score,
       signals,
       vc,
+      onChainTx: anchorTxHash || null,
       txCount: history.length,
       chain: "kite",
       chainId: 2368,
@@ -60,6 +71,28 @@ app.get("/api/score", x402Gate("/api/score"), async (req, res) => {
 
 // Issue VC endpoint
 app.post("/api/issue-vc", issueVcHandler);
+
+// Agent endpoints
+app.post("/api/agent/evaluate", async (req, res) => {
+  const { did, paymentAddress, paymentAmount } = req.body;
+
+  if (!did) {
+    res.status(400).json({ error: "did is required" });
+    return;
+  }
+
+  try {
+    const decision = await evaluateCounterparty(did, paymentAddress, paymentAmount);
+    res.json(decision);
+  } catch (err) {
+    console.error("[api/agent] Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/api/agent/decisions", (_req, res) => {
+  res.json(getDecisionLog());
+});
 
 const PORT = process.env.PORT || 3000;
 
