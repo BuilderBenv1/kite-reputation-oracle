@@ -359,20 +359,28 @@
         if (!res.ok) throw new Error(`Agent returned ${res.status}`);
         const decision = await res.json();
 
-        s1.innerHTML = `<span class="check">&#10003;</span> Oracle returned score: ${decision.score}/100`;
+        s1.innerHTML = `<span class="check">&#10003;</span> Indexed ${decision.txCount} transactions for DID`;
 
-        const threshold = decision.threshold;
-        addStep(`Trust threshold: ${threshold}`, 'done');
+        addStep(`Trust score: ${decision.score}/100`, 'done');
+        addStep(`Threshold: ${decision.threshold}`, 'done');
+
+        if (decision.onChainTx) {
+          addStep('Attestation anchored on Kite chain', 'done');
+          const txSection = document.getElementById('agent-onchain');
+          const txLink = document.getElementById('agent-tx-link');
+          txLink.href = EXPLORER + decision.onChainTx;
+          txLink.textContent = decision.onChainTx;
+          txSection.style.display = 'block';
+        }
+
+        if (decision.vc) {
+          addStep('W3C Verifiable Credential issued', 'done');
+        }
 
         if (decision.action === 'approved') {
           addStep('Score meets threshold — transaction approved', 'done');
           if (decision.settlementTx) {
-            addStep('Settlement anchored on Kite chain', 'done');
-            const txSection = document.getElementById('agent-onchain');
-            const txLink = document.getElementById('agent-tx-link');
-            txLink.href = EXPLORER + decision.settlementTx;
-            txLink.textContent = decision.settlementTx;
-            txSection.style.display = 'block';
+            addStep('Settlement executed on Kite chain', 'done');
           }
         } else {
           addStep('Score below threshold — transaction rejected', 'fail');

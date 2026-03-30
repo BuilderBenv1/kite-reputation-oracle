@@ -1,5 +1,9 @@
 import { ethers } from "ethers";
 import { getProvider, KITE_CHAIN_CONFIG } from "../lib/kite";
+import { getHistoryForDid } from "../indexer";
+import { computeScore } from "../scoring";
+import { issueCredential } from "../lib/vc";
+import { anchorAttestation } from "../lib/attestation";
 
 /**
  * Autonomous trust-gated agent.
@@ -10,26 +14,17 @@ import { getProvider, KITE_CHAIN_CONFIG } from "../lib/kite";
  *
  * Flow:
  *   1. Agent receives counterparty DID
- *   2. Pays x402 micropayment to query oracle
- *   3. Oracle returns trust score + VC
- *   4. If score >= threshold → execute payment to counterparty
- *   5. If score < threshold → reject, log reason
+ *   2. Indexes payment history for DID (via Goldsky subgraph)
+ *   3. Computes trust score from x402 payment signals
+ *   4. Issues W3C VC and anchors attestation on Kite chain
+ *   5. If score >= threshold → execute payment to counterparty
+ *   6. If score < threshold → reject, log reason
  *
  * All decisions and settlements happen on Kite chain.
+ * No human in the loop.
  */
 
-const ORACLE_URL =
-  process.env.ORACLE_URL ||
-  "https://kite-reputation-oracle-production.up.railway.app";
 const TRUST_THRESHOLD = Number(process.env.TRUST_THRESHOLD) || 50;
-
-interface OracleResponse {
-  score: number;
-  signals: Record<string, number>;
-  vc: Record<string, unknown>;
-  txCount: number;
-  chain: string;
-}
 
 interface AgentDecision {
   counterpartyDid: string;
@@ -37,8 +32,11 @@ interface AgentDecision {
   score: number;
   threshold: number;
   reason: string;
-  oracleResponse: OracleResponse | null;
+  signals: object | null;
+  vc: Record<string, unknown> | null;
+  onChainTx: string | null;
   settlementTx: string | null;
+  txCount: number;
   timestamp: string;
 }
 
@@ -46,41 +44,6 @@ const decisionLog: AgentDecision[] = [];
 
 export function getDecisionLog(): AgentDecision[] {
   return decisionLog;
-}
-
-async function queryOracle(did: string): Promise<OracleResponse> {
-  // Step 1: Hit oracle, expect 402
-  const initial = await fetch(
-    `${ORACLE_URL}/api/score?did=${encodeURIComponent(did)}`
-  );
-
-  if (initial.status === 402) {
-    const paymentInfo = (await initial.json()) as any;
-    console.log(
-      `[agent] Oracle requires payment: ${paymentInfo.accepts[0].scheme}`
-    );
-
-    // Step 2: Construct x402 payment header
-    const paymentHeader = Buffer.from(
-      JSON.stringify({
-        scheme: "gokite-aa",
-        network: "kite-testnet",
-        payload: `agent-payment-${Date.now()}`,
-      })
-    ).toString("base64");
-
-    // Step 3: Retry with payment
-    const paid = await fetch(
-      `${ORACLE_URL}/api/score?did=${encodeURIComponent(did)}`,
-      { headers: { "X-PAYMENT": paymentHeader } }
-    );
-
-    if (!paid.ok) throw new Error(`Oracle returned ${paid.status}`);
-    return (await paid.json()) as OracleResponse;
-  }
-
-  if (!initial.ok) throw new Error(`Oracle returned ${initial.status}`);
-  return (await initial.json()) as OracleResponse;
 }
 
 async function settlePayment(
@@ -103,7 +66,7 @@ async function settlePayment(
   );
 
   const tx = await usdt.transfer(toAddress, ethers.parseUnits(amount, 18));
-  const receipt = await tx.wait();
+  await tx.wait();
   console.log(`[agent] Settlement tx: ${tx.hash}`);
   return tx.hash;
 }
@@ -115,32 +78,67 @@ export async function evaluateCounterparty(
 ): Promise<AgentDecision> {
   console.log(`[agent] Evaluating counterparty: ${counterpartyDid}`);
 
-  let decision: AgentDecision = {
+  const decision: AgentDecision = {
     counterpartyDid,
     action: "rejected",
     score: 0,
     threshold: TRUST_THRESHOLD,
     reason: "",
-    oracleResponse: null,
+    signals: null,
+    vc: null,
+    onChainTx: null,
     settlementTx: null,
+    txCount: 0,
     timestamp: new Date().toISOString(),
   };
 
   try {
-    // Query oracle for trust score
-    const oracleResponse = await queryOracle(counterpartyDid);
-    decision.oracleResponse = oracleResponse;
-    decision.score = oracleResponse.score;
-
+    // Step 1: Pull payment history from Goldsky subgraph
+    const history = getHistoryForDid(counterpartyDid);
+    decision.txCount = history.length;
     console.log(
-      `[agent] Trust score for ${counterpartyDid}: ${oracleResponse.score}/100`
+      `[agent] Found ${history.length} transactions for ${counterpartyDid}`
     );
 
-    if (oracleResponse.score >= TRUST_THRESHOLD) {
-      decision.action = "approved";
-      decision.reason = `Score ${oracleResponse.score} meets threshold ${TRUST_THRESHOLD}`;
+    // Step 2: Compute trust score
+    const { score, signals } = computeScore(history);
+    decision.score = score;
+    decision.signals = signals;
+    console.log(
+      `[agent] Trust score for ${counterpartyDid}: ${score}/100`
+    );
 
-      // Settle payment on Kite chain if address and amount provided
+    // Step 3: Anchor attestation on Kite chain
+    try {
+      decision.onChainTx = await anchorAttestation(
+        counterpartyDid,
+        score,
+        signals,
+        `agent-eval-${Date.now()}`
+      );
+    } catch (err) {
+      console.warn("[agent] Attestation anchoring failed (continuing):", err);
+    }
+
+    // Step 4: Issue W3C Verifiable Credential
+    try {
+      const vc = await issueCredential(
+        counterpartyDid,
+        score,
+        signals,
+        decision.onChainTx || undefined
+      );
+      decision.vc = vc as unknown as Record<string, unknown>;
+    } catch (err) {
+      console.warn("[agent] VC issuance failed (continuing):", err);
+    }
+
+    // Step 5: Make autonomous decision
+    if (score >= TRUST_THRESHOLD) {
+      decision.action = "approved";
+      decision.reason = `Score ${score} meets threshold ${TRUST_THRESHOLD}`;
+
+      // Step 6: Settle payment on Kite chain if requested
       if (paymentAddress && paymentAmount) {
         try {
           const txHash = await settlePayment(paymentAddress, paymentAmount);
@@ -153,11 +151,11 @@ export async function evaluateCounterparty(
 
       console.log(`[agent] APPROVED: ${decision.reason}`);
     } else {
-      decision.reason = `Score ${oracleResponse.score} below threshold ${TRUST_THRESHOLD}`;
+      decision.reason = `Score ${score} below threshold ${TRUST_THRESHOLD}`;
       console.log(`[agent] REJECTED: ${decision.reason}`);
     }
   } catch (err) {
-    decision.reason = `Oracle query failed: ${err}`;
+    decision.reason = `Evaluation failed: ${err}`;
     console.error(`[agent] ERROR: ${decision.reason}`);
   }
 
