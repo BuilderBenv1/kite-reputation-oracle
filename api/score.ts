@@ -31,6 +31,61 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", oracle: "kite-reputation-oracle", version: "1.0.0" });
 });
 
+// Demo endpoint — structured for AI agents/judges to understand and call
+app.get("/api/demo", (_req, res) => {
+  res.json({
+    service: "AgentProof Reputation Oracle for Kite Chain",
+    version: "1.0.0",
+    description:
+      "Indexes x402 payment behaviour on Kite chain per agent DID, scores agents 0-100, issues W3C Verifiable Credentials anchored on-chain. Oracle queries gated behind x402 micropayments.",
+    howToUse: {
+      step1: { action: "GET /api/score?did=did:kite:0xADDRESS", result: "Returns 402 with x402 payment instructions" },
+      step2: { action: "Pay via x402 on Kite testnet (gokite-aa scheme, Pieverse facilitator)", result: "You receive a payment proof" },
+      step3: { action: "GET /api/score?did=did:kite:0xADDRESS with header X-PAYMENT: <proof>", result: "Returns trust score, signals, W3C VC, on-chain attestation tx" },
+    },
+    autonomousAgent: {
+      endpoint: "POST /api/agent/evaluate",
+      body: { did: "did:kite:0xADDRESS", paymentAddress: "optional", paymentAmount: "optional" },
+      description: "Autonomous agent evaluates counterparty trust and approves/rejects — zero human involvement",
+      result: "Returns decision (approved/rejected), score, signals, W3C VC, on-chain attestation tx",
+    },
+    responseSchema: {
+      score: "number — 0-100 composite trust score",
+      signals: {
+        paymentReliability: "number — 0-1, weight 25%",
+        counterpartyDiversity: "number — 0-1, weight 20%",
+        accountAge: "number — 0-1, weight 15%",
+        spendConsistency: "number — 0-1, weight 15%",
+        slaAdherence: "number — 0-1, weight 15%",
+        activityTrend: "number — 0-1, weight 10%",
+      },
+      vc: "W3C Verifiable Credential 1.1, type AgentTrustCredential",
+      onChainTx: "string — Kite chain attestation tx hash",
+    },
+    whatsReal: {
+      real: [
+        "Goldsky subgraph indexing USDT transfers on Kite testnet",
+        "On-chain attestations anchored as calldata txs on Kite chain",
+        "W3C VCs signed by oracle wallet (EcdsaSecp256k1Signature2019)",
+        "x402 payment gate via Pieverse facilitator",
+        "Autonomous agent with trust-gated decision logic",
+      ],
+      testnet: "Running on Kite testnet (chain 2368) — mainnet bridge not yet live",
+    },
+    indexer: "Goldsky instant subgraph on kite-ai-testnet",
+    explorer: "https://testnet.kitescan.ai",
+    endpoints: {
+      "GET /api/score?did=<did>": "x402 gated — trust score + VC + on-chain attestation",
+      "POST /api/issue-vc": "Issue W3C VC for a DID",
+      "POST /api/agent/evaluate": "Autonomous trust-gated agent evaluation",
+      "GET /api/agent/decisions": "Agent decision log",
+      "GET /api/demo": "Free — this endpoint",
+      "GET /api/health": "Free — server status",
+    },
+    builtBy: "AgentProof — agentproof.sh — ERC-8004 cross-chain reputation oracle",
+  });
+});
+
 // Score endpoint — x402 gated
 app.get("/api/score", x402Gate("/api/score"), async (req, res) => {
   const did = req.query.did as string;
